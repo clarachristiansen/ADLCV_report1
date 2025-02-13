@@ -83,6 +83,9 @@ class EncoderBlock(nn.Module):
         x = self.layernorm2(fc_out + x)
         x = self.dropout(x)
         return x
+    
+    def get_attention(self, x):
+        return self.attention(x)
 
 class ViT(nn.Module):
     def __init__(self, image_size, channels, patch_size, embed_dim, num_heads, num_layers,
@@ -170,3 +173,23 @@ class ViT(nn.Module):
             x = x[:, 0]
 
         return self.classifier(x)
+    
+    def half_forward(self, img):
+        tokens = self.to_patch_embedding(img)
+        batch_size, num_patches, embed_dim = tokens.size()
+        
+        if self.pool == 'cls':
+            cls_tokens = repeat(self.cls_token, '1 1 e -> b 1 e', b=batch_size)
+            tokens = torch.cat([cls_tokens, tokens], dim=1)
+            num_patches+=1
+        
+        positions =  self.positional_embedding.to(img.device, dtype=img.dtype)
+        if self.pos_enc == 'fixed' and self.pool=='cls':
+            positions = torch.cat([torch.zeros(1, embed_dim).to(img.device), positions], dim=0)
+        x = tokens + positions
+        
+        res = []
+        for i in range(len(self.transformer_blocks)):
+            res.append(self.transformer_blocks[i].get_attention(x))
+            x = self.transformer_blocks[i](x)
+        return res
