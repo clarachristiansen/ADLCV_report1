@@ -1,0 +1,5 @@
+[default]
+entity = adlcv-dtu
+project = 1-2-3_sweep
+base_url = https://api.wandb.ai
+

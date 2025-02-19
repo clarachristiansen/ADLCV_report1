@@ -5,11 +5,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import tqdm
-
+import time
 import torch
 import torchvision
 import torchvision.transforms as transforms
 from vit import ViT
+import wandb
 
 def set_seed(seed=1):
     random.seed(seed)
@@ -28,7 +29,7 @@ def select_two_classes_from_cifar10(dataset, classes):
     dataset.data = dataset.data[idx]
     return dataset
 
-def prepare_dataloaders(batch_size, classes=[3, 7]):
+def prepare_dataloaders(batch_size, classes=[3,7]):
     # TASK: Experiment with data augmentation
     train_transform = transforms.Compose([transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
@@ -67,10 +68,11 @@ def main(image_size=(32,32), patch_size=(4,4), channels=3,
          weight_decay=1e-3, gradient_clipping=1
          
     ):
-
+    start_time = time.perf_counter()
+    run = wandb.init(project="1.2.3_sweep") 
     loss_function = nn.CrossEntropyLoss()
 
-    train_iter, test_iter, _, _ = prepare_dataloaders(batch_size=batch_size)
+    train_iter, test_iter, _, _ = prepare_dataloaders(batch_size=batch_size, classes=[3,7])
 
     model = ViT(image_size=image_size, patch_size=patch_size, channels=channels, 
                 embed_dim=embed_dim, num_heads=num_heads, num_layers=num_layers,
@@ -78,8 +80,14 @@ def main(image_size=(32,32), patch_size=(4,4), channels=3,
                 num_classes=num_classes
     )
 
-    if torch.cuda.is_available():
-        model = model.to('cuda')
+    
+    device = torch.device(
+        'cuda' if torch.cuda.is_available() else 
+        'mps' if torch.backends.mps.is_available() else 
+        'cpu'
+    )
+    
+    model = model.to(device)
 
     opt = torch.optim.AdamW(lr=lr, params=model.parameters(), weight_decay=weight_decay)
     sch = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: min(i / warmup_steps, 1.0))
@@ -91,8 +99,7 @@ def main(image_size=(32,32), patch_size=(4,4), channels=3,
         model.train()
         train_loss = 0
         for image, label in tqdm.tqdm(train_iter):
-            if torch.cuda.is_available():
-                image, label = image.to('cuda'), label.to('cuda')
+            image, label = image.to(device), label.to(device)
             opt.zero_grad()
             out = model(image)
             loss = loss_function(out, label)
@@ -111,8 +118,7 @@ def main(image_size=(32,32), patch_size=(4,4), channels=3,
             model.eval()
             tot, cor= 0.0, 0.0
             for image, label in test_iter:
-                if torch.cuda.is_available():
-                    image, label = image.to('cuda'), label.to('cuda')
+                image, label = image.to(device), label.to(device)
                 out = model(image)
                 loss = loss_function(out, label)
                 val_loss += loss.item()
@@ -122,14 +128,52 @@ def main(image_size=(32,32), patch_size=(4,4), channels=3,
             acc = cor / tot
             val_loss /= len(test_iter)
             print(f'-- train loss {train_loss:.3f} -- validation accuracy {acc:.3f} -- validation loss: {val_loss:.3f}')
+            wandb.log({"train_loss": train_loss, "validation_loss": val_loss, "validation_acc": acc})
             if val_loss <= best_val_loss:
                 torch.save(model.state_dict(), 'model.pth')
-                best_val_loss = val_loss
+                artifact = wandb.Artifact(
+                    name="best_ViT",
+                    type="model",
+                    description="A ViT model trained to classify CIFAR-10",
+                    metadata={"train_loss": train_loss, "validation_loss": val_loss, "validation_acc": acc},
+                )
+                artifact.add_file("model.pth")
+                run.log_artifact(artifact)
 
+                best_val_loss = val_loss
+    
+    end_time = time.perf_counter()
+    wandb.log({"Time": end_time - start_time})
+    run.finish()
 
 if __name__ == "__main__":
     #os.environ["CUDA_VISIBLE_DEVICES"]= str(0)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  
+    device = torch.device(
+        'cuda' if torch.cuda.is_available() else 
+        'mps' if torch.backends.mps.is_available() else 
+        'cpu'
+    )
     print(f"Model will run on {device}")
     set_seed(seed=1)
-    main()
+
+    ### WANDB ###
+    sweep_config = {
+    'method': 'bayes',  # Options: 'random', 'grid', 'bayes'
+    'metric': {
+        'name': 'val_loss',
+        'goal': 'minimize'
+    },
+    'parameters': {
+        'patch_size': {'values': [(2,2), (4,4), (8,8)]}, # [2, 3, 4, 5]
+        'embed_dim': {'values': [64, 128, 256]}, # [1e-3, 5e-4, 1e-4]
+        'num_heads': {'values': [3, 4, 5]},
+        'num_layers': {'values': [3, 4, 5]},
+        'pos_enc': {'values': ['fixed', 'learnable']},
+        'pool': {'values': ['cls', 'mean', 'max']},
+    }
+    }
+
+    sweep_id = wandb.sweep(sweep_config, project="1.2.3_sweep")
+    
+    wandb.agent(sweep_id, function=main, count=10)
+    

@@ -45,6 +45,7 @@ class Attention(nn.Module):
 
         attention_logits = torch.matmul(queries, keys.transpose(1, 2))
         attention_logits = attention_logits * self.scale
+        self.attention = attention_logits
         attention = F.softmax(attention_logits, dim=-1)
         out = torch.matmul(attention, values)
 
@@ -56,6 +57,23 @@ class Attention(nn.Module):
         assert out.size() == (batch_size, seq_len, embed_dim)
 
         return self.o_projection(out)
+    
+    def get_attention(self, x):
+        batch_size, seq_len, embed_dim = x.size()
+        keys    = self.k_projection(x)
+        queries = self.q_projection(x)
+        values  = self.v_projeciton(x)
+
+        # Rearrange keys, queries and values 
+        # from batch_size x seq_len x embed_dim to (batch_size x num_head) x seq_len x head_dim
+        keys = rearrange(keys, 'b s (h d) -> (b h) s d', h=self.num_heads, d=self.head_dim)
+        queries = rearrange(queries, 'b s (h d) -> (b h) s d', h=self.num_heads, d=self.head_dim)
+        values = rearrange(values, 'b s (h d) -> (b h) s d', h=self.num_heads, d=self.head_dim)
+
+        attention_logits = torch.matmul(queries, keys.transpose(1, 2))
+        attention_logits = attention_logits * self.scale
+        return attention_logits
+
 
 class EncoderBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, fc_dim=None, dropout=0.0):
@@ -85,7 +103,7 @@ class EncoderBlock(nn.Module):
         return x
     
     def get_attention(self, x):
-        return self.attention(x)
+        return self.attention.get_attention(x)
 
 class ViT(nn.Module):
     def __init__(self, image_size, channels, patch_size, embed_dim, num_heads, num_layers,
