@@ -72,7 +72,8 @@ class Attention(nn.Module):
 
         attention_logits = torch.matmul(queries, keys.transpose(1, 2))
         attention_logits = attention_logits * self.scale
-        return attention_logits
+        attention = F.softmax(attention_logits, dim=-1)
+        return attention
 
 
 class EncoderBlock(nn.Module):

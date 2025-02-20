@@ -120,7 +120,12 @@ ipython_config.py
 .pdm-build/
 data/*
 data/
+exercise2/outputs/*
+exercise2/outputs/
+
 exercise2/model.pth
+exercise2/model_decent.pth
+
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 

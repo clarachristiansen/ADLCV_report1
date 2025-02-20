@@ -3,3 +3,4 @@ einops
 seaborn
 tqdm
 torch
+wandb
