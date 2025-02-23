@@ -46,8 +46,8 @@ def generate_text(model, tokenizer, prompt, max_gen_len=500, device="cpu"):
         elif strategy == "sampling":
             # Multinomial Sampling: Sample from the probability distribution.
             # The temperature parameter controls the randomness of the sampling.
-            temperature = torch.normal(mean=1.6, std=0.25, size=(1,)).to(device) # ORIGINALLY: 0.8
-            probabilities = torch.nn.functional.softmax(next_token_logits/temperature) # softmax with temperature
+            temperature = 0.8 #torch.normal(mean=0.7, std=0.25, size=(1,)).to(device) # ORIGINALLY: 0.8
+            probabilities = torch.nn.functional.softmax(next_token_logits/temperature, dim=0) # softmax with temperature
             next_token_id = torch.multinomial(probabilities, 1, replacement=True).unsqueeze(0) # multinomial sampling
 
         # Append predicted token to input_ids. Concatenate

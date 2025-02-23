@@ -54,7 +54,7 @@ class MaskedAttention(nn.Module):
 
         # Create a causal mask (upper-triangular with zeros on the diagonal)
         # so that each token can only attend to tokens at positions <= its own. HINT. torch.triu()
-        mask = torch.triu(torch.ones(attention_logits.shape).to(DEVICE), diagonal=1).to(DEVICE).bool()
+        mask = torch.tril(torch.ones(attention_logits.shape).to(DEVICE), diagonal=-1).to(DEVICE).bool()
 
         # Expand the mask to match attention_logits' shape: (batch_size * num_heads, seq_length, seq_length). HINT: torch.masked_fill()
         attention_logits = torch.masked_fill(input=attention_logits, mask=mask.to(DEVICE), value=-torch.inf)
