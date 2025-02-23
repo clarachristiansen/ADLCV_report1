@@ -24,6 +24,7 @@ model = ViT(image_size=configs['image_size'], patch_size=configs['patch_size'], 
                 pos_enc=configs['pos_enc'], pool=configs['pool'], dropout=configs['dropout'], fc_dim=configs['fc_dim'], 
                 num_classes=configs['num_classes'])
 model.load_state_dict(torch.load('model.pth'))
+count = 0 
 with torch.no_grad():
     model.eval()
     for image, label in testloader:
@@ -39,7 +40,9 @@ with torch.no_grad():
 
         rollout = torch.eye(at[0].size(-1))
         for block in at:
-            block_fused = block.min(dim=0).values
+            #block_fused = block.min(dim=0).values
+            #block_fused = block.max(dim=0).values
+            block_fused = block.mean(dim=0)
 
             block_fused += torch.eye(block_fused.size(-1))
             block_fused /= block_fused.sum(dim=-1, keepdim=True)
@@ -66,12 +69,29 @@ with torch.no_grad():
         cls_attention_colored_img.putalpha(135)  # Adjust alpha for blending (lower value for darker overlay)
 
         ### PLOT ###
-        fig, axes = plt.subplots(1, 4, figsize=(10, 5))  # Ensure appropriate figure size
-        axes[0].set_aspect("equal")
-        sns.heatmap(cls_attention_resized, cmap=sns.color_palette("viridis", as_cmap=True), ax=axes[0],cbar=False)
-        axes[1].imshow((image.squeeze(0).permute(1, 2, 0)+ 1) / 2)
-        axes[2].imshow(cls_attention_colored_img)
-        axes[3].imshow(image.squeeze(0).permute(1, 2, 0), alpha=0.5)
-        axes[3].imshow(cls_attention_colored_img,alpha=0.9)
-        plt.savefig(f"outputs/{time.time()}.png")
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Ensure appropriate figure size
+        axes[0].imshow((image.squeeze(0).permute(1, 2, 0)+ 1) / 2)
+        axes[0].set_xticks([])
+        axes[0].set_yticks([])
+        axes[0].set_title('Image')
+        axes[1].set_aspect("equal")
+        ax1 = sns.heatmap(cls_attention_resized, cmap=sns.color_palette("viridis", as_cmap=True), 
+                   ax=axes[1], cbar=False)
+        axes[1].set_xticks([])
+        axes[1].set_yticks([])
+        axes[1].set_title('Attention')
+        ax1.patch.set_edgecolor('black')  # Set edge color
+        ax1.patch.set_linewidth(1.5)  # Set line width
+
+        for spine in axes[1].spines.values():
+            spine.set_edgecolor('black')
+            spine.set_linewidth(1.5)
+
+        #axes[2].imshow(image.squeeze(0).permute(1, 2, 0), alpha=0.4)
+        #axes[2].imshow((cls_attention_colored_img),alpha=0.9)
+        #axes[2].set_xticks([])
+        #axes[2].set_yticks([])
+        #axes[2].set_title('Attention Overlay')
+        plt.savefig(f"outputs/{count}.png")
+        count += 1
         plt.close()
